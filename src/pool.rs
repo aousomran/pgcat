@@ -155,6 +155,9 @@ pub struct PoolSettings {
     // Number of shards.
     pub shards: usize,
 
+    // Map of shard id by alias
+    pub shards_by_alias: HashMap<String, usize>,
+
     // Connecting user.
     pub user: User,
     pub db: String,
@@ -252,6 +255,7 @@ impl Default for PoolSettings {
             auth_query_user: None,
             auth_query_password: None,
             plugins: None,
+            shards_by_alias: HashMap::new(),
         }
     }
 }
@@ -302,7 +306,6 @@ impl ConnectionPool {
     /// Construct the connection pool from the configuration.
     pub async fn from_config(client_server_map: ClientServerMap) -> Result<(), Error> {
         let config = get_config();
-
         let mut new_pools = HashMap::new();
         let mut address_id: usize = 0;
 
@@ -332,6 +335,7 @@ impl ConnectionPool {
                     pool_name, user.username
                 );
 
+                let mut shards_by_alias: HashMap<String, usize> = HashMap::new();
                 let mut shards = Vec::new();
                 let mut addresses = Vec::new();
                 let mut banlist = Vec::new();
@@ -351,6 +355,15 @@ impl ConnectionPool {
                     let mut servers = Vec::new();
                     let mut replica_number = 0;
 
+                    match &shard.alias {
+                        Some(alias) if !alias.is_empty() => {
+                                shards_by_alias.insert(alias.to_string(), shard_idx.parse::<usize>().unwrap()); 
+                            }
+                        _ => {
+                            debug!("{} shard at index {} does not have an alias", pool_name, shard_idx);
+                        }
+                    }
+                    
                     // Load Mirror settings
                     for (address_index, server) in shard.servers.iter().enumerate() {
                         let mut mirror_addresses = vec![];
@@ -523,6 +536,10 @@ impl ConnectionPool {
                         pool_name, user.username
                     );
                 }
+                
+                
+                debug!("pool {} shard map {:?}", pool_name, &shards_by_alias);
+                
 
                 let pool = ConnectionPool {
                     databases: Arc::new(shards),
@@ -539,6 +556,7 @@ impl ConnectionPool {
                         load_balancing_mode: pool_config.load_balancing_mode,
                         // shards: pool_config.shards.clone(),
                         shards: shard_ids.len(),
+                        shards_by_alias: shards_by_alias.clone(),
                         user: user.clone(),
                         db: pool_name.clone(),
                         default_role: match pool_config.default_role.as_str() {

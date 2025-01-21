@@ -27,7 +27,7 @@ use std::time::Duration;
 use std::{cmp, mem};
 
 /// Regexes used to parse custom commands.
-const CUSTOM_SQL_REGEXES: [&str; 7] = [
+const CUSTOM_SQL_REGEXES: [&str; 8] = [
     r"(?i)^ *SET SHARDING KEY TO '?([0-9]+)'? *;? *$",
     r"(?i)^ *SET SHARD TO '?([0-9]+|ANY)'? *;? *$",
     r"(?i)^ *SHOW SHARD *;? *$",
@@ -35,6 +35,7 @@ const CUSTOM_SQL_REGEXES: [&str; 7] = [
     r"(?i)^ *SHOW SERVER ROLE *;? *$",
     r"(?i)^ *SET PRIMARY READS TO '?(on|off|default)'? *;? *$",
     r"(?i)^ *SHOW PRIMARY READS *;? *$",
+    r"(?i)^ *SET SHARD ALIAS TO '?([a-zA-Z0-9-]+)'? *;? *$",
 ];
 
 /// Custom commands.
@@ -47,6 +48,7 @@ pub enum Command {
     ShowServerRole,
     SetPrimaryReads,
     ShowPrimaryReads,
+    SetShardAlias,
 }
 
 #[derive(PartialEq, Debug)]
@@ -248,12 +250,14 @@ impl QueryRouter {
             4 => Command::ShowServerRole,
             5 => Command::SetPrimaryReads,
             6 => Command::ShowPrimaryReads,
+            7 => Command::SetShardAlias,
             _ => unreachable!(),
         };
 
         let mut value = match command {
             Command::SetShardingKey
             | Command::SetShard
+            | Command::SetShardAlias
             | Command::SetServerRole
             | Command::SetPrimaryReads => {
                 // Capture value. I know this re-runs the regex engine, but I haven't
@@ -306,6 +310,13 @@ impl QueryRouter {
                     "ANY" => Some(rand::random::<usize>() % self.pool_settings.shards),
                     _ => Some(value.parse::<usize>().unwrap()),
                 };
+            }
+
+            Command::SetShardAlias => {
+                debug!("received set shard alias to with value: '{}'", &value);
+                debug!("finding shard in map {:?}", &self.pool_settings.shards_by_alias);
+                self.active_shard = Some(*self.pool_settings.shards_by_alias.get(&value).unwrap_or(&0));
+                debug!("active_shard is: {:?}", &self.active_shard);
             }
 
             Command::SetServerRole => {
@@ -1618,6 +1629,7 @@ mod test {
             pool_mode: PoolMode::Transaction,
             load_balancing_mode: crate::config::LoadBalancingMode::Random,
             shards: 2,
+            shards_by_alias: std::collections::HashMap::new(),
             user: crate::config::User::default(),
             default_role: Some(Role::Replica),
             query_parser_enabled: true,
@@ -1700,6 +1712,7 @@ mod test {
             pool_mode: PoolMode::Transaction,
             load_balancing_mode: crate::config::LoadBalancingMode::Random,
             shards: 5,
+            shards_by_alias: std::collections::HashMap::new(),
             user: crate::config::User::default(),
             default_role: Some(Role::Replica),
             query_parser_enabled: true,
