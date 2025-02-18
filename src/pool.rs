@@ -210,6 +210,9 @@ pub struct PoolSettings {
     // Regex for searching for the shard id in SQL statements
     pub shard_id_regex: Option<Regex>,
 
+    // Regex for searching for the shard id by alias in SQL statements
+    pub shard_alias_regex: Option<Regex>,
+
     // What to do when no shard is selected in a sharded system
     pub default_shard: DefaultShard,
 
@@ -249,6 +252,7 @@ impl Default for PoolSettings {
             ban_time: General::default_ban_time(),
             sharding_key_regex: None,
             shard_id_regex: None,
+            shard_alias_regex: None,
             regex_search_limit: 1000,
             default_shard: DefaultShard::Shard(0),
             auth_query: None,
@@ -357,13 +361,17 @@ impl ConnectionPool {
 
                     match &shard.alias {
                         Some(alias) if !alias.is_empty() => {
-                                shards_by_alias.insert(alias.to_string(), shard_idx.parse::<usize>().unwrap()); 
-                            }
+                            shards_by_alias
+                                .insert(alias.to_string(), shard_idx.parse::<usize>().unwrap());
+                        }
                         _ => {
-                            debug!("{} shard at index {} does not have an alias", pool_name, shard_idx);
+                            debug!(
+                                "{} shard at index {} does not have an alias",
+                                pool_name, shard_idx
+                            );
                         }
                     }
-                    
+
                     // Load Mirror settings
                     for (address_index, server) in shard.servers.iter().enumerate() {
                         let mut mirror_addresses = vec![];
@@ -536,10 +544,8 @@ impl ConnectionPool {
                         pool_name, user.username
                     );
                 }
-                
-                
+
                 debug!("pool {} shard map {:?}", pool_name, &shards_by_alias);
-                
 
                 let pool = ConnectionPool {
                     databases: Arc::new(shards),
@@ -585,6 +591,10 @@ impl ConnectionPool {
                             .map(|regex| Regex::new(regex.as_str()).unwrap()),
                         shard_id_regex: pool_config
                             .shard_id_regex
+                            .clone()
+                            .map(|regex| Regex::new(regex.as_str()).unwrap()),
+                        shard_alias_regex: pool_config
+                            .shard_alias_regex
                             .clone()
                             .map(|regex| Regex::new(regex.as_str()).unwrap()),
                         regex_search_limit: pool_config.regex_search_limit.unwrap_or(1000),

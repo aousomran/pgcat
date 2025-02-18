@@ -167,7 +167,8 @@ impl QueryRouter {
         let len = message_cursor.get_i32() as usize;
 
         let comment_shard_routing_enabled = self.pool_settings.shard_id_regex.is_some()
-            || self.pool_settings.sharding_key_regex.is_some();
+            || self.pool_settings.sharding_key_regex.is_some()
+            || self.pool_settings.shard_alias_regex.is_some();
 
         // Check for any sharding regex matches in any queries
         if comment_shard_routing_enabled {
@@ -207,6 +208,37 @@ impl QueryRouter {
                         if let Some(sharding_key) = sharding_key {
                             debug!("Setting sharding_key to {:?}", sharding_key);
                             self.set_sharding_key(sharding_key);
+                            // Skip other command processing since a sharding command was found
+                            return None;
+                        }
+                    }
+
+                    // Check for a sharding_alias included in the query
+                    if let Some(shard_alias_regex) = &self.pool_settings.shard_alias_regex {
+                        let shard_alias =
+                            shard_alias_regex
+                                .captures(&initial_segment)
+                                .and_then(|cap| {
+                                    cap.get(1).and_then(|id| Some(id.as_str().to_string()))
+                                });
+                        if let Some(shard_alias) = shard_alias {
+                            debug!(
+                                "received shard alias comment with value: '{}'",
+                                &shard_alias
+                            );
+                            debug!(
+                                "finding shard in map {:?}",
+                                &self.pool_settings.shards_by_alias
+                            );
+                            let found_shard = Some(
+                                *self
+                                    .pool_settings
+                                    .shards_by_alias
+                                    .get(&shard_alias)
+                                    .unwrap_or(&0),
+                            );
+                            self.set_shard(found_shard);
+                            debug!("active_shard is: {:?}", &self.active_shard);
                             // Skip other command processing since a sharding command was found
                             return None;
                         }
@@ -314,8 +346,12 @@ impl QueryRouter {
 
             Command::SetShardAlias => {
                 debug!("received set shard alias to with value: '{}'", &value);
-                debug!("finding shard in map {:?}", &self.pool_settings.shards_by_alias);
-                self.active_shard = Some(*self.pool_settings.shards_by_alias.get(&value).unwrap_or(&0));
+                debug!(
+                    "finding shard in map {:?}",
+                    &self.pool_settings.shards_by_alias
+                );
+                self.active_shard =
+                    Some(*self.pool_settings.shards_by_alias.get(&value).unwrap_or(&0));
                 debug!("active_shard is: {:?}", &self.active_shard);
             }
 
@@ -1643,6 +1679,7 @@ mod test {
             ban_time: PoolSettings::default().ban_time,
             sharding_key_regex: None,
             shard_id_regex: None,
+            shard_alias_regex: None,
             default_shard: crate::config::DefaultShard::Shard(0),
             regex_search_limit: 1000,
             auth_query: None,
@@ -1726,6 +1763,7 @@ mod test {
             ban_time: PoolSettings::default().ban_time,
             sharding_key_regex: Some(Regex::new(r"/\* sharding_key: (\d+) \*/").unwrap()),
             shard_id_regex: Some(Regex::new(r"/\* shard_id: (\d+) \*/").unwrap()),
+            shard_alias_regex: None,
             default_shard: crate::config::DefaultShard::Shard(0),
             regex_search_limit: 1000,
             auth_query: None,

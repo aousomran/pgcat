@@ -571,6 +571,7 @@ pub struct Pool {
 
     pub sharding_key_regex: Option<String>,
     pub shard_id_regex: Option<String>,
+    pub shard_alias_regex: Option<String>,
     pub regex_search_limit: Option<usize>,
 
     #[serde(default = "Pool::default_default_shard")]
@@ -705,6 +706,7 @@ impl Pool {
         for (option, name) in [
             (&self.shard_id_regex, "shard_id_regex"),
             (&self.sharding_key_regex, "sharding_key_regex"),
+            (&self.shard_alias_regex, "shard_alias_regex"),
         ] {
             if let Some(regex) = option {
                 if let Err(parse_err) = Regex::new(regex.as_str()) {
@@ -794,6 +796,7 @@ impl Default for Pool {
             automatic_sharding_key: None,
             sharding_key_regex: None,
             shard_id_regex: None,
+            shard_alias_regex: None,
             regex_search_limit: Some(1000),
             default_shard: Self::default_default_shard(),
             auth_query: None,
