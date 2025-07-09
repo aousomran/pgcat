@@ -1664,6 +1664,7 @@ mod test {
         let pool_settings = PoolSettings {
             pool_mode: PoolMode::Transaction,
             load_balancing_mode: crate::config::LoadBalancingMode::Random,
+            checkout_failure_limit: None,
             shards: 2,
             shards_by_alias: std::collections::HashMap::new(),
             user: crate::config::User::default(),
@@ -1748,6 +1749,7 @@ mod test {
         let pool_settings = PoolSettings {
             pool_mode: PoolMode::Transaction,
             load_balancing_mode: crate::config::LoadBalancingMode::Random,
+            checkout_failure_limit: Some(10),
             shards: 5,
             shards_by_alias: std::collections::HashMap::new(),
             user: crate::config::User::default(),
